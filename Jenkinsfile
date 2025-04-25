@@ -2,65 +2,59 @@ pipeline {
     agent any
 
     environment {
-        PROJECT_DIR = 'ITE/GCL06/DR416985/Jenkins/node-js-dummy-test'
-        BUILD_IMAGE = 'node-build-image'
-        TEST_IMAGE = 'node-test-image'
-        DEPLOY_IMAGE = 'node-deploy-image'
+        APP_NAME = 'node-js-dummy-test'
+        IMAGE_NAME = "node-app:${env.BUILD_NUMBER}"
+        WORKDIR = 'ITE/GCL06/DR416985/Jenkins/node-js-dummy-test'
     }
 
     stages {
-        stage('Clone') {
+        stage('Checkout') {
             steps {
-                sh '''
-                    rm -rf MDO2025_INO
-                    git clone https://github.com/InzynieriaOprogramowaniaAGH/MDO2025_INO.git
-                    cd MDO2025_INO
-                    git checkout DR416985
-                '''
+                checkout scm
             }
         }
 
         stage('Build') {
             steps {
-                dir("${PROJECT_DIR}") {
-                    sh "docker build -t ${BUILD_IMAGE} -f node-build.Dockerfile ."
+                dir("${WORKDIR}") {
+                    sh 'docker build -t ${IMAGE_NAME} -f node-build.Dockerfile .'
                 }
             }
         }
 
         stage('Test') {
             steps {
-                dir("${PROJECT_DIR}") {
-                    sh "docker build -t ${TEST_IMAGE} -f node-test.Dockerfile ."
-                    sh "docker run --rm ${TEST_IMAGE}"
+                dir("${WORKDIR}") {
+                    sh 'docker build -t ${IMAGE_NAME}-test -f node-test.Dockerfile .'
+                    sh 'docker run --rm ${IMAGE_NAME}-test'
                 }
             }
         }
 
         stage('Deploy') {
             steps {
-                dir("${PROJECT_DIR}") {
-                    sh '''
-                        docker rm -f app || true
-                        docker build -t ${DEPLOY_IMAGE} -f node-deploy.Dockerfile .
-                        docker run -d -p 3000:3000 --name app ${DEPLOY_IMAGE}
-                    '''
+                dir("${WORKDIR}") {
+                    sh 'docker build -t ${IMAGE_NAME}-deploy -f node-deploy.Dockerfile .'
+                    sh 'docker rm -f app || true'
+                    sh 'docker run -d -p 3000:3000 --name app ${IMAGE_NAME}-deploy'
                 }
             }
         }
 
         stage('Verify') {
             steps {
-                sh "curl -v http://localhost:3000 || true"
+                sh 'sleep 5' // Czekamy na uruchomienie aplikacji
+                sh 'curl -f http://localhost:3000'
             }
         }
     }
 
     post {
-        always {
-            echo 'Sprzątanie...'
-            sh "docker stop app || true"
-            sh "docker rm app || true"
+        success {
+            echo 'Pipeline zakończony sukcesem.'
+        }
+        failure {
+            echo 'Pipeline zakończony niepowodzeniem.'
         }
     }
 }
